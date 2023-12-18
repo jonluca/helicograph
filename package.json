@@ -110,8 +110,5 @@
     "prettier-plugin-tailwindcss": "^0.5.9",
     "webpack": "^5.89.0"
   },
-  "packageManager": "yarn@4.0.1",
-  "engines": {
-    "node": "21.x"
-  }
+  "packageManager": "yarn@4.0.1"
 }
