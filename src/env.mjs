@@ -10,7 +10,7 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "test", "production", "debug"]).default("development"),
     DEBUG_LOG: z.enum(["debug"]).optional(),
     VERCEL_URL: z.string().optional(),
-    PORT: z.number().optional(),
+    PORT: z.number().or(z.string()).optional(),
   },
 
   /**

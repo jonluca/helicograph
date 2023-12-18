@@ -53,7 +53,7 @@ model Claim {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ClaimID                 Int     @unique
+  ClaimID                 Int
   ScheduleNumber          Int?
   ClaimNumber             Int?
   DateFiled               String?
@@ -65,6 +65,7 @@ model Claim {
   caseId String            @db.ObjectId
   case   RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
+  @@unique([ClaimID, caseId])
   @@index([ClaimNumber])
   @@index([caseId])
 }

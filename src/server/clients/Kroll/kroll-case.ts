@@ -167,7 +167,9 @@ export class KrollCase extends BaseService {
           return newClaim;
         });
         for (const claims of chunk(processedClaims, 1000)) {
-          const existing = await prisma.claim.findMany({ where: { ClaimID: { in: claims.map((l) => l.ClaimID) } } });
+          const existing = await prisma.claim.findMany({
+            where: { caseId: this.restructuringCase.id, ClaimID: { in: claims.map((l) => l.ClaimID) } },
+          });
           const existingIds = new Set<number>(existing.map((e) => e.ClaimID));
           const missing = claims.filter((c) => !existingIds.has(c.ClaimID));
           if (missing.length) {
