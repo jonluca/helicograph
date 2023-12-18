@@ -9,7 +9,8 @@
     "monitor:dev": "IS_DEV=true RUN_NOW=true yarn tsx src/server/index.ts",
     "monitor:dev-bruteforce": "BRUTE_FORCE=true IS_DEV=true RUN_NOW=true yarn tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "lint": "next lint"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.474.0",
