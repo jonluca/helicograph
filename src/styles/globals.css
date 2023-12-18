@@ -1,0 +1,241 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body::-webkit-scrollbar {
+  display: none;
+}
+body::-webkit-scrollbar-track {
+  display: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+:root {
+  touch-action: pan-x pan-y;
+  height: 100%;
+}
+.z-99999 {
+  z-index: 99999;
+}
+.masked-overflow {
+  /* scroll bar width, for use in mask calculations */
+  /*--scrollbar-width: 8px;*/
+
+  /* mask fade distance, for use in mask calculations */
+  --mask-height: 5px;
+
+  /* If content exceeds height of container, overflow! */
+  overflow-x: auto;
+
+  /* Our height limit */
+  /*height: 300px;*/
+
+  /* The CSS mask */
+
+  /* The content mask is a linear gradient from top to bottom */
+  --mask-image-content: linear-gradient(
+    to right,
+    transparent,
+    black var(--mask-height),
+    black calc(100% - var(--mask-height)),
+    transparent
+  );
+
+  /* Here we scale the content gradient to the width of the container
+minus the scrollbar width. The height is the full container height */
+  --mask-size-content: 100% 100%;
+
+  /* The scrollbar mask is a black pixel */
+  --mask-image-scrollbar: linear-gradient(black, black);
+
+  /* The width of our black pixel is the width of the scrollbar.
+The height is the full container height */
+  --mask-size-scrollbar: 0px 100%;
+
+  /* Apply the mask image and mask size variables */
+  mask-image: var(--mask-image-content), var(--mask-image-scrollbar);
+  mask-size: var(--mask-size-content), var(--mask-size-scrollbar);
+
+  /* Position the content gradient in the top left, and the
+scroll gradient in the top right */
+  mask-position:
+    0 0,
+    100% 0;
+
+  /* We don't repeat our mask images */
+  mask-repeat: no-repeat, no-repeat;
+}
+
+.main-bg {
+  --tw-bg-opacity: 1;
+  background-color: rgb(249 250 251 / var(--tw-bg-opacity));
+  height: 100%;
+}
+#__next {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+html {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  scroll-behavior: smooth;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scroll {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.scroll::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+}
+.scroll::-webkit-scrollbar-track {
+  background-color: transparent;
+  border-radius: 20px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-image: none;
+  border-radius: 20px;
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safari-render {
+  transform: translate3d(0, 0, 0);
+}
+
+/**:not(html) {*/
+/*  transform: translate3d(0, 0, 0);*/
+/*  perspective: 1000px;*/
+/*}*/
+.lds-ring {
+  display: inline-block;
+  position: relative;
+}
+.spinner {
+  box-sizing: border-box;
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  margin: 4px;
+  border: 4px solid;
+  border-radius: 50%;
+  animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  border-color: #fff transparent transparent transparent;
+}
+.lds-ring div:nth-child(1) {
+  animation-delay: -0.45s;
+}
+.lds-ring div:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.lds-ring div:nth-child(3) {
+  animation-delay: -0.15s;
+}
+@keyframes lds-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes skeleton {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    /* +0.5s of delay between each loop */
+    transform: translateX(100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  animation: skeleton 1.6s linear 0.5s infinite;
+  background: linear-gradient(90deg, transparent, #0000000a, transparent);
+  content: "";
+  position: absolute;
+  transform: translateX(-100%); /* Avoid flash during server-side hydration */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+input.apple-switch {
+  position: relative;
+  -webkit-appearance: none;
+  outline: none;
+  width: 44px;
+  height: 24px;
+  background-color: #fff;
+  border: 1px solid #d9dadc;
+  border-radius: 48px;
+  box-shadow: inset -20px 0 0 0 #fff;
+  animation: apple-switch 0.2s ease-out forwards;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+
+input.apple-switch:after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  background: transparent;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: 2px 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+input.apple-switch:checked {
+  box-shadow: inset 20px 0 0 0 #000;
+  border-color: #000;
+}
+
+input.apple-switch:checked:after {
+  left: 20px;
+  box-shadow: -2px 4px 3px rgba(0, 0, 0, 0.05);
+}
+
+@keyframes apple-switch {
+  0% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}

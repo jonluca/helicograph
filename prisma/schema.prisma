@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Always after the prisma-client-js generator
+generator json {
+  provider = "prisma-json-types-generator"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model RestructuringCase {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastSeen    DateTime  @default(now())
+  lastFetched DateTime?
+
+  url       String  @unique
+  name      String
+  isDeleted Boolean @default(false)
+
+  claims              Claim[]
+  CaseClaimsDataPoint CaseClaimsDataPoint[]
+  DocketEntry         DocketEntry[]
+
+  @@index([lastSeen])
+}
+
+model DocketEntry {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  DocketNumber Int               @unique
+  CaseNumber   Int               @unique
+  Description  String
+  DateFiled    String
+  caseId       String            @db.ObjectId
+  case         RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
+
+model Claim {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ClaimID                 Int     @unique
+  ScheduleNumber          Int?
+  ClaimNumber             Int?
+  DateFiled               String?
+  CreditorName            String
+  ParsedClaimAmount       Int?
+  TotalCurrentClaimAmount String
+  DebtorName              String
+
+  caseId String            @db.ObjectId
+  case   RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([ClaimNumber])
+  @@index([caseId])
+}
+
+model CaseClaimsDataPoint {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recordCount Int
+  caseId      String            @db.ObjectId
+  case        RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
