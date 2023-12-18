@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "monitor": "yarn tsx src/server/index.ts",
+    "monitor": "NODE_ENV=production yarn tsx src/server/index.ts",
     "monitor:dev": "IS_DEV=true RUN_NOW=true yarn tsx src/server/index.ts",
     "monitor:dev-bruteforce": "BRUTE_FORCE=true IS_DEV=true RUN_NOW=true yarn tsx server/index.ts",
     "typecheck": "tsc --noEmit",

@@ -1,9 +1,10 @@
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import type { AxiosInstance, AxiosProxyConfig, AxiosRequestConfig, AxiosResponse } from "axios";
 import axios from "axios";
 import { HttpCookieAgent, HttpsCookieAgent } from "http-cookie-agent/http";
 import { CookieJar } from "tough-cookie";
 import { load } from "cheerio";
 import logger from "~/server/logger";
+import { ProxyClient } from "~/server/clients/ProxyClient";
 export const ciphers = [
   "TLS_AES_128_GCM_SHA256",
   "TLS_AES_256_GCM_SHA384",
@@ -33,22 +34,57 @@ interface CapsolverResponse {
 interface Solution {
   cookie: string;
 }
-const jar = new CookieJar(undefined, { allowSpecialUseDomain: true, looseMode: true, rejectPublicSuffixes: false });
-const config: AxiosRequestConfig = { jar, timeout: 60_000 };
-config.httpAgent = new HttpCookieAgent({ cookies: { jar }, keepAlive: true });
 
-config.httpsAgent = new HttpsCookieAgent({
-  cookies: { jar },
-  keepAlive: true,
-  ciphers,
-});
-
-const client = axios.create(config);
 export class BaseService {
   client: AxiosInstance;
   jar: CookieJar;
+  wafPromise: Promise<CapsolverResponse | null> | null = null;
+  proxyClient: ProxyClient;
+  proxyId?: number;
+  proxy: AxiosProxyConfig | undefined = undefined;
 
-  constructor() {
+  private generateNewAxiosClient = () => {
+    const jar = new CookieJar(undefined, { allowSpecialUseDomain: true, looseMode: true, rejectPublicSuffixes: false });
+
+    this.proxyId = Math.floor(Math.random() * ProxyClient.proxyList.list.length);
+    const proxyListElement = ProxyClient.proxyList.list[this.proxyId];
+    if (proxyListElement) {
+      this.proxy = {
+        host: proxyListElement.host,
+        port: Number(proxyListElement.port),
+        protocol: "http",
+      };
+    }
+    const config: AxiosRequestConfig = { jar, timeout: 60_000, proxy: this.proxy };
+    config.httpAgent = new HttpCookieAgent({ cookies: { jar }, keepAlive: true });
+
+    config.httpsAgent = new HttpsCookieAgent({
+      cookies: { jar },
+      keepAlive: true,
+      ciphers,
+    });
+    const client = axios.create(config);
+    this.jar = jar;
+    this.client = client;
+  };
+
+  constructor(proxyClient: ProxyClient) {
+    this.proxyClient = proxyClient;
+
+    const jar = new CookieJar(undefined, { allowSpecialUseDomain: true, looseMode: true, rejectPublicSuffixes: false });
+    const config: AxiosRequestConfig = {
+      jar,
+      timeout: 60_000,
+      proxy: this.proxy,
+    };
+    config.httpAgent = new HttpCookieAgent({ cookies: { jar }, keepAlive: true });
+
+    config.httpsAgent = new HttpsCookieAgent({
+      cookies: { jar },
+      keepAlive: true,
+      ciphers,
+    });
+    const client = axios.create(config);
     this.jar = jar;
     this.client = client;
     this.client.interceptors.response.use(
@@ -58,8 +94,9 @@ export class BaseService {
           const now = new Date();
           const didSucceed = await this.refreshWafToken(response);
           if (!didSucceed) {
-            logger.error("Failed to solve captcha");
-            throw new Error("Failed to solve captcha");
+            const failedToSolveCaptcha = "Failed to solve 202 captcha";
+            logger.error(failedToSolveCaptcha);
+            throw new Error(failedToSolveCaptcha);
           }
           logger.info(`Solved captcha in ${new Date().getTime() - now.getTime()}ms`);
           return this.client.request(response.config);
@@ -71,33 +108,50 @@ export class BaseService {
           throw new Error("Unauthorized");
         }
 
+        if (error.response?.status === 403) {
+          logger.error("WAF Blocked");
+          this.generateNewAxiosClient();
+          return this.client.request(error.response.config);
+        }
+
         if (error.response?.status === 405) {
           logger.info("Received WAF challenge");
           const now = new Date();
           const didSucceed = await this.refreshWafToken(error.response);
           if (!didSucceed) {
-            logger.error("Failed to solve captcha");
-            throw new Error("Failed to solve captcha");
+            const failedToSolveCaptch = "Failed to solve 405 captcha";
+            logger.error(failedToSolveCaptch);
+            throw new Error(failedToSolveCaptch);
           }
           logger.info(`Solved captcha in ${new Date().getTime() - now.getTime()}ms`);
           return this.client.request(error.response.config);
         }
+        logger.error(`Failed to fetch ${error.config.url} - ${error.status}`);
         throw error;
       },
     );
   }
 
   private refreshWafToken = async (response: AxiosResponse) => {
+    if (this.wafPromise) {
+      return this.wafPromise;
+    }
+    this.wafPromise = this.capsolverInit(response);
+    const result = await this.wafPromise;
+    this.wafPromise = null;
+    return result;
+  };
+  private capsolverInit = async (response: AxiosResponse) => {
     /*
-    the html will contain
+the html will contain
 
-    window.gokuProps = {
+window.gokuProps = {
 "key":"AQIDAHjcYu/GjX+QlghicBgQ/7bFaQZ+m5FKCMDnO+vTbNg96AHpDSBut/6uIEJP1wJT6m4KAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMLwxVqPwf3VJtk8M5AgEQgDsaKl/P7uu1I+EU6JRND5CYaCOqsZU3ZeOqp5kZ/AWeum5NBwzuKYlrt4A5EbXSQEAGhQ4FlzuS2oZHIg==",
-          "iv":"grDd8AAAEyAABjJf",
-          "context":"3Rh2O33SZyDNw7+d2HgDOiMFdGnQ+MA1EXrymR+F57GKYbDiWZG3cVq65VDJOtpl8E0n62i+kf1D6+gtpLQDCAcQin2Cpixo0xYB3BoGpf121oCYBMcESmPA3UXH2Ly0Z2EgjtKSwDekBWsXjU/lXFJnaEvvcc44OLcALX4On6DjUWwWKwCNJXarnqDfnAnQ9Ni2aLj/cDcpyL78ZhUHX9OxZmE7VJawvBvT5aDy0l4KPVbpBJk3EZGLOr2n9FhtXjy52+o3+r+yxR0Wf2/UTnR3Nbcd5ENbNSLSbLUwHsBzKvX5WkMHLDsRP/YZs97BQ967aKNbNSpQGUTygbBZlRZoAWwMq0ULtMgICIxpmtj3Mo9Wezb9vMo2YfMKJvq+BnR7ScXlzG8z0LET5ZfqsQ=="
+      "iv":"grDd8AAAEyAABjJf",
+      "context":"3Rh2O33SZyDNw7+d2HgDOiMFdGnQ+MA1EXrymR+F57GKYbDiWZG3cVq65VDJOtpl8E0n62i+kf1D6+gtpLQDCAcQin2Cpixo0xYB3BoGpf121oCYBMcESmPA3UXH2Ly0Z2EgjtKSwDekBWsXjU/lXFJnaEvvcc44OLcALX4On6DjUWwWKwCNJXarnqDfnAnQ9Ni2aLj/cDcpyL78ZhUHX9OxZmE7VJawvBvT5aDy0l4KPVbpBJk3EZGLOr2n9FhtXjy52+o3+r+yxR0Wf2/UTnR3Nbcd5ENbNSLSbLUwHsBzKvX5WkMHLDsRP/YZs97BQ967aKNbNSpQGUTygbBZlRZoAWwMq0ULtMgICIxpmtj3Mo9Wezb9vMo2YfMKJvq+BnR7ScXlzG8z0LET5ZfqsQ=="
 };
 we want to extract the key, iv and context
-    */
+*/
     const html = response.data;
     const websiteURL = response.config.url!;
     const status = response.status;
@@ -121,7 +175,8 @@ we want to extract the key, iv and context
       const json = text?.substring(start!, end! + 1);
       const data = JSON.parse(json || "{}");
       if (!data.key || !data.iv || !data.context) {
-        return false;
+        logger.error("Failed to parse aws challenge");
+        return null;
       }
       task = {
         ...task,
@@ -130,14 +185,7 @@ we want to extract the key, iv and context
         awsContext: data.context,
       };
     }
-    const didSucceed = await this.capsolverInit(task, websiteURL);
-    if (!didSucceed) {
-      throw new Error("Failed to solve captcha");
-    }
-    return true;
-  };
-  private capsolverInit = async (task: Record<string, string>, websiteURL: string) => {
-    const response = await this.post<{
+    const taskResponse = await this.post<{
       errorId: number;
       errorCode: string;
       errorDescription: string;
@@ -152,7 +200,7 @@ we want to extract the key, iv and context
         timeout: 30_000,
       },
     );
-    const id = response.data.taskId;
+    const id = taskResponse.data.taskId;
     let count = 0;
 
     while (count < 15) {
@@ -166,6 +214,7 @@ we want to extract the key, iv and context
       }
 
       if (capsolverResponse.status === "failed") {
+        logger.error(`Capsolver failed to solve captcha - ${capsolverResponse.errorDescription}`);
         return null;
       }
 

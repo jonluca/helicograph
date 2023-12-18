@@ -1,11 +1,12 @@
 import { Virtuoso } from "react-virtuoso";
 import type { VirtuosoHandle } from "react-virtuoso";
-import React, { Fragment, useRef } from "react";
+import React, { Fragment, useMemo, useRef, useState } from "react";
 import { isSafari, isIOS, isMobileSafari, isMobile } from "react-device-detect";
 import type { Claim, RestructuringCase } from "@prisma/client";
 import { useApp } from "../../context";
 import type { RouterOutputs } from "~/utils/api";
 import LinearProgress from "@mui/material/LinearProgress";
+import Fuse from "fuse.js";
 
 type CaseObject = RouterOutputs["krollRouter"]["getAllCases"][number];
 const CaseItem = ({ caseEntity }: { caseEntity: CaseObject | null | undefined }) => {
@@ -17,14 +18,19 @@ const CaseItem = ({ caseEntity }: { caseEntity: CaseObject | null | undefined })
 
   return (
     <div onClick={() => setItem(caseEntity?.id)} title={`${caseEntity.name} - (${caseEntity._count.claims})`}>
-      {caseEntity.name} - ({caseEntity._count.claims})
+      {caseEntity.name} - ({caseEntity._count.claims.toLocaleString()})
     </div>
   );
 };
 export const renderCaseItem = (index: number, caseEntity: CaseObject | null | undefined) => {
   const key = caseEntity?.id || `shimmer-${index}`;
   return (
-    <div className={"mb-2 cursor-pointer z-50 max-w-[400px] line-clamp-1 overflow-ellipsis"} key={key}>
+    <div
+      className={
+        "rounded-lg border p-2 border-gray-600 mb-2 cursor-pointer z-50 max-w-[400px] line-clamp-3 overflow-ellipsis bg-blue-100"
+      }
+      key={key}
+    >
       <CaseItem caseEntity={caseEntity} />
     </div>
   );
@@ -35,7 +41,7 @@ export const renderClaimItem = (index: number, caseEntity: Claim | null | undefi
 
   return (
     <div className={"mb-2 cursor-pointer z-50 max-w-[700px] line-clamp-1 overflow-ellipsis"} key={key}>
-      {caseEntity?.CreditorName} - ( $
+      {caseEntity?.CreditorName} - ($
       {caseEntity?.ParsedClaimAmount?.toLocaleString(undefined, {
         currency: "USD",
       })}
@@ -121,12 +127,32 @@ export const CaseList = ({
       await fetchNextPage();
     }
   }, [fetchNextPage, isFetching]);
+  const [search, setSearch] = useState("");
 
+  const casesToRender = useMemo(() => {
+    if (!search || !cases) {
+      return cases;
+    }
+    const fuse = new Fuse(cases, { keys: ["name"] });
+    return fuse.search(search).map((l) => l.item);
+  }, [cases, search]);
   return (
-    <div className={"w-full flex flex-col"}>
+    <div className={"w-full flex flex-col max-w-[400px] gap-2"}>
       <span className={"text-xl font-bold"}>Cases</span>
+      <input
+        className={"rounded-full border border-gray-600 p-2"}
+        onChange={(e) => {
+          setSearch(e.target.value);
+        }}
+        placeholder={"Search for cases"}
+      />
       {isFetching && <LinearProgress />}
-      <BaseTable<CaseObject> data={cases} isFetching={isFetching} loadMore={loadMore} renderItem={renderCaseItem} />
+      <BaseTable<CaseObject>
+        data={casesToRender}
+        isFetching={isFetching}
+        loadMore={loadMore}
+        renderItem={renderCaseItem}
+      />
     </div>
   );
 };
@@ -145,10 +171,18 @@ export const ClaimList = ({
       await fetchNextPage();
     }
   }, [fetchNextPage, isFetching]);
+  const setSearch = useApp((c) => c.setSearch);
 
   return (
-    <div className={"w-full flex flex-col"}>
+    <div className={"w-full flex flex-col max-w-[700px] gap-2"}>
       <span className={"text-xl font-bold"}>Claims</span>
+      <input
+        className={"rounded-full border border-gray-600 p-2 mb-2"}
+        onChange={(e) => {
+          setSearch(e.target.value);
+        }}
+        placeholder={"Search for cases"}
+      />
       {isFetching && <LinearProgress />}
       <BaseTable<Claim> data={claims} isFetching={isFetching} loadMore={loadMore} renderItem={renderClaimItem} />
     </div>

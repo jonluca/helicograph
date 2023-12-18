@@ -17,13 +17,13 @@ const useModelParams = () => {
   } as const;
 };
 export const useCaseList = () => {
-  const params = useModelParams();
-  return api.krollRouter.getAllCases.useInfiniteQuery(params, modelListQueryOpts);
+  return api.krollRouter.getAllCases.useInfiniteQuery({}, modelListQueryOpts);
 };
 
 export const useClaimsList = () => {
   const params = useModelParams();
   const caseId = useApp((c) => c.caseId);
+  const search = useApp((c) => c.search);
 
-  return api.krollRouter.getAllClaims.useInfiniteQuery({ ...params, caseId: caseId! }, modelListQueryOpts);
+  return api.krollRouter.getAllClaims.useInfiniteQuery({ ...params, caseId: caseId!, search }, modelListQueryOpts);
 };

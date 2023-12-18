@@ -5,6 +5,8 @@ import { load } from "cheerio";
 import { chunk } from "lodash-es";
 import { prisma } from "../../db";
 import logger from "~/server/logger";
+import pMap from "p-map";
+import type { ProxyClient } from "~/server/clients/ProxyClient";
 interface ClaimsResponse {
   total: number;
   page: number;
@@ -20,11 +22,14 @@ interface ClaimsResponse {
   }[];
 }
 
+const htmlStringTextMap = new Map<string, string>();
+
 export class KrollCase extends BaseService {
   restructuringCase: RestructuringCase;
   userAgent: UserAgent;
-  constructor(restructuringCase: RestructuringCase) {
-    super();
+
+  constructor(proxyClient: ProxyClient, restructuringCase: RestructuringCase) {
+    super(proxyClient);
     this.restructuringCase = restructuringCase;
     this.userAgent = new UserAgent({
       deviceCategory: "desktop",
@@ -56,15 +61,21 @@ export class KrollCase extends BaseService {
   };
 
   private getTextFromHtmlString = (html: string) => {
+    if (htmlStringTextMap.has(html)) {
+      return htmlStringTextMap.get(html)!;
+    }
     const $ = load(html, undefined);
     const content = $(".tablesaw-cell-content")?.text()?.trim();
     if (content) {
+      htmlStringTextMap.set(html, content);
       return content;
     }
     const body = $("body")?.text()?.trim();
     if (body) {
+      htmlStringTextMap.set(html, body);
       return body;
     }
+    htmlStringTextMap.set(html, "");
     return "";
   };
 
@@ -107,92 +118,119 @@ export class KrollCase extends BaseService {
         }
       });
 
-      const claims = await this.post<ClaimsResponse>(
-        `${this.restructuringCase.url}/Home-LoadClaimData`,
-        new URLSearchParams({
-          ClaimNumber: "",
-          ScheduleNumber: "",
-          CreditorName: "",
-          ConfirmationID: "",
-          TotalCurrentClaimAmount: "Select an Option|Select an Option|",
-          Dates: "|",
-          ScopeValue: "Claims & Schedules",
-          QuickSearch: "",
-          Deptors: debtors.join("ê"),
-          fl: "1",
-          _search: "false",
-          nd: new Date().getTime().toString(),
-          rows: "1000000",
-          page: "1",
-          sidx: "CreditorName",
-          sord: "asc",
-        }),
-        {
-          headers: this.sharedHeaders(),
-          maxRedirects: 0,
-          timeout: 60_000,
-        },
-      );
+      let page = 1;
+      const ROWS_LIMIT = 200_000;
 
-      if (claims.data && claims.data.records) {
-        await prisma.caseClaimsDataPoint.create({
-          data: {
-            recordCount: claims.data.records,
-            caseId: this.restructuringCase.id,
+      while (page) {
+        const claims = await this.post<ClaimsResponse>(
+          `${this.restructuringCase.url}/Home-LoadClaimData`,
+          new URLSearchParams({
+            ClaimNumber: "",
+            ScheduleNumber: "",
+            CreditorName: "",
+            ConfirmationID: "",
+            TotalCurrentClaimAmount: "Select an Option|Select an Option|",
+            Dates: "|",
+            ScopeValue: "Claims & Schedules",
+            QuickSearch: "",
+            Deptors: debtors.join("ê"),
+            fl: "1",
+            _search: "false",
+            nd: new Date().getTime().toString(),
+            rows: String(ROWS_LIMIT),
+            page: String(page),
+            sidx: "CreditorName",
+            sord: "asc",
+          }),
+          {
+            headers: this.sharedHeaders(),
+            maxRedirects: 0,
+            timeout: 60_000,
           },
-        });
+        );
 
-        const processedClaims = claims.data.rows.map((claim) => {
-          const totalClaimAmount = this.getTextFromHtmlString(claim.TotalCurrentClaimAmount);
-          const scheduleNumber = this.getTextFromHtmlString(claim.ScheduleNumber).replace("Schedule", "");
-          const dateFiled = this.getTextFromHtmlString(claim.DateFiled).replace("Filed Date", "");
-          const claimNumber = this.getTextFromHtmlString(claim.ClaimNumber).replace("Claim #", "");
-          const newClaim = {
-            ClaimID: claim.ClaimID,
-            ScheduleNumber: scheduleNumber ? parseInt(scheduleNumber) : undefined,
-            ClaimNumber: claimNumber ? parseInt(claimNumber) : undefined,
-            DateFiled: dateFiled ? dateFiled : undefined,
-            CreditorName: this.getTextFromHtmlString(claim.CreditorName).replace("Name on File", "").trim(),
-            TotalCurrentClaimAmount: totalClaimAmount,
-            DebtorName: this.getTextFromHtmlString(claim.DebtorName),
-            ParsedClaimAmount: totalClaimAmount ? parseFloat(totalClaimAmount.replace(/[^\d.]/gi, "")) : undefined,
-            caseId: this.restructuringCase.id,
-          };
-          for (const key of ["ClaimNumber", "ScheduleNumber", "ParsedClaimAmount"] as const) {
-            if (isNaN(newClaim[key]!)) {
-              delete newClaim[key];
-            }
-          }
-
-          return newClaim;
-        });
-        for (const claims of chunk(processedClaims, 1000)) {
-          const existing = await prisma.claim.findMany({
-            where: { caseId: this.restructuringCase.id, ClaimID: { in: claims.map((l) => l.ClaimID) } },
-          });
-          const existingIds = new Set<number>(existing.map((e) => e.ClaimID));
-          const missing = claims.filter((c) => !existingIds.has(c.ClaimID));
-          if (missing.length) {
-            logger.info(`Saving ${missing.length} entries`);
-            await prisma.claim.createMany({
-              data: missing,
+        if (claims.data && claims.data.records) {
+          logger.info(
+            `Found ${claims.data.rows.length}/${claims.data.records} claims for ${this.restructuringCase.name} on page ${page}`,
+          );
+          if (page === 1) {
+            await prisma.caseClaimsDataPoint.create({
+              data: {
+                recordCount: claims.data.records,
+                caseId: this.restructuringCase.id,
+              },
             });
           }
-        }
-        //
-        // await pMap(processedClaims, this.getDetailsForClaim, {
-        //   concurrency: process.env.NODE_ENV === "production" ? 5 : 1,
-        // });
-      } else {
-        if (
-          typeof claims.data?.records !== "number" &&
-          !String(claims.data).includes("<title>Kroll Restructuring Administration</title>")
-        ) {
-          logger.error(
-            `Unable to fetch claims for ${this.restructuringCase.name}, got unexpected response ${JSON.stringify(
-              claims.data,
-            )}`,
+
+          const processedClaims = claims.data.rows.map((claim) => {
+            const totalClaimAmount = this.getTextFromHtmlString(claim.TotalCurrentClaimAmount);
+            const scheduleNumber = this.getTextFromHtmlString(claim.ScheduleNumber).replace("Schedule", "");
+            const dateFiled = this.getTextFromHtmlString(claim.DateFiled).replace("Filed Date", "");
+            const claimNumber = this.getTextFromHtmlString(claim.ClaimNumber).replace("Claim #", "");
+            const newClaim = {
+              ClaimID: claim.ClaimID,
+              ScheduleNumber: scheduleNumber ? parseInt(scheduleNumber) : undefined,
+              ClaimNumber: claimNumber ? parseInt(claimNumber) : undefined,
+              DateFiled: dateFiled ? dateFiled : undefined,
+              CreditorName: this.getTextFromHtmlString(claim.CreditorName).replace("Name on File", "").trim(),
+              TotalCurrentClaimAmount: totalClaimAmount,
+              DebtorName: this.getTextFromHtmlString(claim.DebtorName),
+              ParsedClaimAmount: totalClaimAmount ? parseFloat(totalClaimAmount.replace(/[^\d.]/gi, "")) : undefined,
+              caseId: this.restructuringCase.id,
+            };
+            for (const key of ["ClaimNumber", "ScheduleNumber", "ParsedClaimAmount"] as const) {
+              if (isNaN(newClaim[key]!)) {
+                delete newClaim[key];
+              }
+            }
+
+            return newClaim;
+          });
+          let saved = 0;
+
+          await pMap(
+            chunk(processedClaims, 2500),
+            async (claims) => {
+              const existing = await prisma.claim.findMany({
+                where: { caseId: this.restructuringCase.id, ClaimID: { in: claims.map((l) => l.ClaimID) } },
+                select: {
+                  ClaimID: true,
+                },
+              });
+              const existingIds = new Set<number>(existing.map((e) => e.ClaimID));
+              const missing = claims.filter((c) => !existingIds.has(c.ClaimID));
+              if (missing.length) {
+                const count = await prisma.claim.createMany({
+                  data: missing,
+                });
+                saved += count.count;
+                logger.info(`Saved ${saved} entries for ${this.restructuringCase.name}`);
+              }
+            },
+            { concurrency: 5 },
           );
+          //
+          // await pMap(processedClaims, this.getDetailsForClaim, {
+          //   concurrency: process.env.NODE_ENV === "production" ? 5 : 1,
+          // });
+        } else {
+          if (
+            typeof claims.data?.records !== "number" &&
+            !String(claims.data).includes("<title>Kroll Restructuring Administration</title>")
+          ) {
+            logger.error(
+              `Unable to fetch claims for ${this.restructuringCase.name}, got unexpected response ${JSON.stringify(
+                claims.data,
+              )}`,
+            );
+          }
+          break;
+        }
+
+        if (typeof claims.data === "object" && claims.data?.rows?.length && claims.data?.rows?.length === ROWS_LIMIT) {
+          page += 1;
+        } else {
+          page = 0; // break after the logic below is done
         }
       }
     } catch (e) {

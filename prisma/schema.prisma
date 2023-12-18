@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
 }
 
 /// Always after the prisma-client-js generator
@@ -68,6 +69,8 @@ model Claim {
   @@unique([ClaimID, caseId])
   @@index([ClaimNumber])
   @@index([caseId])
+  @@index([ClaimID])
+  @@index([caseId, ParsedClaimAmount])
 }
 
 model CaseClaimsDataPoint {

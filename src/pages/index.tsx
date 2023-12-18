@@ -27,7 +27,7 @@ export default function IndexPage() {
           </Typography>
         </div>
       </div>
-      <div className="col-span-6 max-h-screen md:px-2 no-scrollbar w-full h-full flex">
+      <div className="col-span-6 max-h-screen md:px-2 no-scrollbar w-full h-full flex gap-4">
         <CaseList fetchNextPage={fetchNextPage} cases={cases} isFetching={isFetching} />
         {caseId && <ClaimList fetchNextPage={rest.fetchNextPage} claims={clamsData} isFetching={rest.isFetching} />}
       </div>

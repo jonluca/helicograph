@@ -10,6 +10,7 @@ import { KrollCase } from "./kroll-case";
 import { uniqBy } from "lodash-es";
 import logger from "~/server/logger";
 import dayjs from "dayjs";
+import { ProxyClient } from "~/server/clients/ProxyClient";
 
 function caseLinkExtractor(html: string) {
   const $ = load(html);
@@ -36,6 +37,7 @@ function caseLinkExtractor(html: string) {
   return uniqBy(links, (links) => links.url);
 }
 
+const proxyClient = new ProxyClient();
 export class KrollClient extends BaseService {
   s3client = new S3({
     credentials: {
@@ -45,6 +47,10 @@ export class KrollClient extends BaseService {
     region: process.env.AWS_REGION || "",
   });
   S3_BUCKET = "claim-docs";
+
+  constructor() {
+    super(proxyClient);
+  }
 
   private sharedHeaders = () => {
     return {
@@ -69,6 +75,7 @@ export class KrollClient extends BaseService {
   };
 
   loadRestructuringCases = async () => {
+    await this.proxyClient.fetchProxies();
     logger.info("Loading restructuring cases");
     const response = await this.get<string>("https://www.kroll.com/en/restructuring-administration-cases", {
       headers: this.sharedHeaders(),
@@ -116,7 +123,7 @@ export class KrollClient extends BaseService {
   };
 
   refreshCase = async (restructuringCase: RestructuringCase) => {
-    const krollCase = new KrollCase(restructuringCase);
+    const krollCase = new KrollCase(this.proxyClient, restructuringCase);
     try {
       await krollCase.refreshCase();
       await prisma.restructuringCase.update({
@@ -133,6 +140,7 @@ export class KrollClient extends BaseService {
   };
 
   refreshCases = async () => {
+    await this.proxyClient.fetchProxies();
     const cases = await prisma.restructuringCase.findMany({
       where: {
         isDeleted: false,

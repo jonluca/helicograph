@@ -31,12 +31,31 @@ export const krollRouter = createTRPCRouter({
     const { ctx, input } = opts;
     const cursor = input.cursor ?? 0;
     const limit = input.limit ?? 100;
+    const search = input.search ?? "";
     if (!input.caseId) {
       return [];
     }
     return ctx.prisma.claim.findMany({
       where: {
         caseId: input.caseId,
+        ...(search
+          ? {
+              OR: [
+                {
+                  CreditorName: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  DebtorName: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
+          : {}),
       },
       cursor: cursor ? { id: cursor } : undefined,
       skip: cursor ? 1 : undefined,
