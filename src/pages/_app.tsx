@@ -1,7 +1,6 @@
 import "~/styles/globals.css";
 import "react-toastify/dist/ReactToastify.css";
 
-import { type Session } from "next-auth";
 import { type AppType } from "next/app";
 import { api } from "~/utils/api";
 import React from "react";
@@ -14,15 +13,11 @@ import createEmotionCache from "~/data/emotionCache";
 import "react-tooltip/dist/react-tooltip.css";
 import { Tooltip } from "react-tooltip";
 
-interface Sess {
-  session: Session | null;
-}
-
 const clientSideEmotionCache = createEmotionCache();
 
-export type AppProps = AppPropsType<NextRouter, Sess>;
+export type AppProps = AppPropsType<NextRouter>;
 
-export const AppWrapper: AppType<Sess> = ({ Component, pageProps: { session, ...pageProps } }: AppProps) => {
+export const AppWrapper: AppType = ({ Component, pageProps }: AppProps) => {
   return (
     <CacheProvider value={clientSideEmotionCache}>
       <Providers>
