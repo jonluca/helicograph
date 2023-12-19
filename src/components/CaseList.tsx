@@ -1,5 +1,6 @@
 import { Virtuoso } from "react-virtuoso";
 import type { VirtuosoHandle } from "react-virtuoso";
+import type { ChangeEventHandler } from "react";
 import React, { Fragment, useMemo, useRef, useState } from "react";
 import { isSafari, isIOS, isMobileSafari, isMobile } from "react-device-detect";
 import type { Claim, RestructuringCase } from "@prisma/client";
@@ -7,6 +8,7 @@ import { useApp } from "../../context";
 import type { RouterOutputs } from "~/utils/api";
 import LinearProgress from "@mui/material/LinearProgress";
 import Fuse from "fuse.js";
+import { debounce } from "lodash-es";
 
 type CaseObject = RouterOutputs["krollRouter"]["getAllCases"][number];
 const CaseItem = ({ caseEntity }: { caseEntity: CaseObject | null | undefined }) => {
@@ -136,14 +138,19 @@ export const CaseList = ({
     const fuse = new Fuse(cases, { keys: ["name"] });
     return fuse.search(search).map((l) => l.item);
   }, [cases, search]);
+  const onChange = useMemo(
+    () =>
+      debounce((e: Parameters<ChangeEventHandler<HTMLInputElement>>[0]) => {
+        setSearch(e.target.value);
+      }, 250),
+    [],
+  );
   return (
     <div className={"w-full flex flex-col max-w-[400px] gap-2"}>
       <span className={"text-xl font-bold"}>Cases</span>
       <input
         className={"rounded-full border border-gray-600 p-2"}
-        onChange={(e) => {
-          setSearch(e.target.value);
-        }}
+        onChange={onChange}
         placeholder={"Search for cases"}
       />
       {isFetching && <LinearProgress />}

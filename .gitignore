@@ -43,3 +43,4 @@ yarn-error.log*
 db/
 src/server/clients/Kroll/temp.html
 src/server/clients/Kroll/*.json
+pgdb

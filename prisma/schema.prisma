@@ -12,12 +12,12 @@ generator json {
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model RestructuringCase {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  id          String    @id @default(cuid())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   lastSeen    DateTime  @default(now())
@@ -35,38 +35,39 @@ model RestructuringCase {
 }
 
 model DocketEntry {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  DocketNumber Int               @unique
-  CaseNumber   Int               @unique
+  DocketNumber BigInt            @unique
+  CaseNumber   BigInt            @unique
   Description  String
   DateFiled    String
-  caseId       String            @db.ObjectId
+  caseId       String
   case         RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
 }
 
 model Claim {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ClaimID                 Int
-  ScheduleNumber          Int?
-  ClaimNumber             Int?
+  ClaimID                 BigInt
+  ScheduleNumber          BigInt?
+  ClaimNumber             BigInt?
   DateFiled               String?
   CreditorName            String
-  ParsedClaimAmount       Int?
+  ParsedClaimAmount       Float?
   TotalCurrentClaimAmount String
   DebtorName              String
 
-  caseId String            @db.ObjectId
+  caseId String
   case   RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@unique([ClaimID, caseId])
+  @@unique([caseId, ClaimID])
   @@index([ClaimNumber])
   @@index([caseId])
   @@index([ClaimID])
@@ -74,12 +75,12 @@ model Claim {
 }
 
 model CaseClaimsDataPoint {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   recordCount Int
-  caseId      String            @db.ObjectId
+  caseId      String
   case        RestructuringCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])

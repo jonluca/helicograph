@@ -5,7 +5,6 @@ import { load } from "cheerio";
 import { chunk } from "lodash-es";
 import { prisma } from "../../db";
 import logger from "~/server/logger";
-import pMap from "p-map";
 import type { ProxyClient } from "~/server/clients/ProxyClient";
 interface ClaimsResponse {
   total: number;
@@ -187,28 +186,17 @@ export class KrollCase extends BaseService {
             return newClaim;
           });
           let saved = 0;
-
-          await pMap(
-            chunk(processedClaims, 2500),
-            async (claims) => {
-              const existing = await prisma.claim.findMany({
-                where: { caseId: this.restructuringCase.id, ClaimID: { in: claims.map((l) => l.ClaimID) } },
-                select: {
-                  ClaimID: true,
-                },
+          for (const claims of chunk(processedClaims, 2500)) {
+            if (claims.length) {
+              const count = await prisma.claim.createMany({
+                data: claims,
+                skipDuplicates: true,
               });
-              const existingIds = new Set<number>(existing.map((e) => e.ClaimID));
-              const missing = claims.filter((c) => !existingIds.has(c.ClaimID));
-              if (missing.length) {
-                const count = await prisma.claim.createMany({
-                  data: missing,
-                });
-                saved += count.count;
-                logger.info(`Saved ${saved} entries for ${this.restructuringCase.name}`);
-              }
-            },
-            { concurrency: 5 },
-          );
+              saved += count.count;
+              logger.info(`Saved ${saved} entries for ${this.restructuringCase.name}`);
+            }
+          }
+
           //
           // await pMap(processedClaims, this.getDetailsForClaim, {
           //   concurrency: process.env.NODE_ENV === "production" ? 5 : 1,

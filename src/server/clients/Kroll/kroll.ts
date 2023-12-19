@@ -146,9 +146,7 @@ export class KrollClient extends BaseService {
         isDeleted: false,
         OR: [
           {
-            lastFetched: {
-              isSet: false,
-            },
+            lastFetched: null,
           },
           {
             lastFetched: {
@@ -159,7 +157,7 @@ export class KrollClient extends BaseService {
       },
     });
     await pMap(cases, this.refreshCase, {
-      concurrency: process.env.NODE_ENV === "production" ? 5 : 1,
+      concurrency: 10,
     });
   };
 }

@@ -70,7 +70,15 @@ export class BaseService {
 
   constructor(proxyClient: ProxyClient) {
     this.proxyClient = proxyClient;
-
+    this.proxyId = Math.floor(Math.random() * ProxyClient.proxyList.list.length);
+    const proxyListElement = ProxyClient.proxyList.list[this.proxyId];
+    if (proxyListElement) {
+      this.proxy = {
+        host: proxyListElement.host,
+        port: Number(proxyListElement.port),
+        protocol: "http",
+      };
+    }
     const jar = new CookieJar(undefined, { allowSpecialUseDomain: true, looseMode: true, rejectPublicSuffixes: false });
     const config: AxiosRequestConfig = {
       jar,
@@ -133,15 +141,6 @@ export class BaseService {
   }
 
   private refreshWafToken = async (response: AxiosResponse) => {
-    if (this.wafPromise) {
-      return this.wafPromise;
-    }
-    this.wafPromise = this.capsolverInit(response);
-    const result = await this.wafPromise;
-    this.wafPromise = null;
-    return result;
-  };
-  private capsolverInit = async (response: AxiosResponse) => {
     /*
 the html will contain
 
